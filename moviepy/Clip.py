@@ -7,12 +7,13 @@ and AudioClip.
 from copy import copy
 
 import numpy as np
-import proglog
+from moviepy.decorators import (apply_to_mask,
+                                apply_to_audio,
+                                requires_duration,
+                                outplace,
+                                convert_to_seconds,
+                                use_clip_fps_by_default)
 from tqdm import tqdm
-
-from moviepy.decorators import (apply_to_audio, apply_to_mask,
-                                convert_to_seconds, outplace,
-                                requires_duration, use_clip_fps_by_default)
 
 
 class Clip:
@@ -441,7 +442,7 @@ class Clip:
 
     @requires_duration
     @use_clip_fps_by_default
-    def iter_frames(self, fps=None, with_times = False, logger=None,
+    def iter_frames(self, fps=None, with_times = False, progress_bar=False,
                     dtype=None):
         """ Iterates over all the frames of the clip.
 
@@ -467,15 +468,22 @@ class Clip:
         >>> print ( [frame[0,:,0].max()
                      for frame in myclip.iter_frames()])
         """
-        logger = proglog.default_bar_logger(logger)
-        for t in logger.iter_bar(t=np.arange(0, self.duration, 1.0/fps)):
-            frame = self.get_frame(t)
-            if (dtype is not None) and (frame.dtype != dtype):
-                frame = frame.astype(dtype)
-            if with_times:
-                yield t, frame
-            else:
-                yield frame
+
+        def generator():
+            for t in np.arange(0, self.duration, 1.0/fps):
+                frame = self.get_frame(t)
+                if (dtype is not None) and (frame.dtype != dtype):
+                    frame = frame.astype(dtype)
+                if with_times:
+                    yield t, frame
+                else:
+                    yield frame
+
+        if progress_bar:
+            nframes = int(self.duration*fps)+1
+            return tqdm(generator(), total=nframes)
+
+        return generator()
 
     def close(self):
         """ 

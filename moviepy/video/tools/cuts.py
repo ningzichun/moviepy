@@ -149,7 +149,7 @@ class FramesMatches(list):
         
         matching_frames = [] # the final result.
         
-        for (t,frame) in clip.iter_frames(with_times=True, logger='bar'):
+        for (t,frame) in clip.iter_frames(with_times=True, progress_bar=True):
             
             flat_frame = 1.0*frame.flatten()
             F_norm_sq = dot_product(flat_frame, flat_frame)
@@ -269,7 +269,7 @@ class FramesMatches(list):
 
 @use_clip_fps_by_default
 def detect_scenes(clip=None, luminosities=None, thr=10,
-                  logger='bar', fps=None):
+                  progress_bar=True, fps=None):
     """ Detects scenes of a clip based on luminosity changes.
     
     Note that for large clip this may take some time
@@ -312,7 +312,7 @@ def detect_scenes(clip=None, luminosities=None, thr=10,
     """       
     if luminosities is None:
         luminosities = [f.sum() for f in clip.iter_frames(
-                             fps=fps, dtype='uint32', logger=logger)]
+                             fps=fps, dtype='uint32', progress_bar=progress_bar)]
     
     luminosities = np.array(luminosities, dtype=float)
     if clip is not None:

@@ -69,8 +69,7 @@ requires = [
     'tqdm>=4.11.2,<5.0',
     "numpy>=1.17.3; python_version!='2.7'",
     "numpy; python_version>='2.7'",
-    'requests>=2.8.1,<3.0',
-    'proglog<=1.0.0'
+    'requests>=2.8.1,<3.0'
     ]
 
 optional_reqs = [
