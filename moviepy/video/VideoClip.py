@@ -10,8 +10,8 @@ import tempfile
 import warnings
 
 import numpy as np
-import proglog
 from imageio import imread, imsave
+from tqdm import tqdm
 
 from ..Clip import Clip
 from ..compat import DEVNULL, string_types
@@ -20,7 +20,7 @@ from ..decorators import (add_mask_if_none, apply_to_mask,
                           convert_masks_to_RGB, convert_to_seconds, outplace,
                           requires_duration, use_clip_fps_by_default)
 from ..tools import (deprecated_version_of, extensions_dict, find_extension,
-                     is_string, subprocess_call)
+                     is_string, subprocess_call, verbose_print)
 from .io.ffmpeg_writer import ffmpeg_write_video
 from .io.gif_writers import (write_gif, write_gif_with_image_io,
                              write_gif_with_tempfiles)
@@ -140,7 +140,7 @@ class VideoClip(Clip):
                         rewrite_audio=True, remove_temp=True,
                         write_logfile=False, verbose=True,
                         threads=None, ffmpeg_params=None,
-                        logger='bar'):
+                        progress_bar=True, moviepy_threads=0):
         """Write the clip to a videofile.
 
         Parameters
@@ -237,11 +237,22 @@ class VideoClip(Clip):
           These will be files ending with '.log' with the name of the
           output file in them.
 
-        logger
-          Either "bar" for progress bar or None or any Proglog logger.
+        verbose
+          Boolean indicating whether to print infomation.
 
-        verbose (deprecated, kept for compatibility)
-          Formerly used for toggling messages on/off. Use logger=None now.
+        progress_bar
+          Boolean indicating whether to show the progress bar.
+
+        moviepy_threads
+          Count of extra threads to spawn for moviepy's frame
+          processing. Default is 0, using any value over that
+          will use the multithreaded frame iterator.
+
+          Best threads : moviepy_threads ratio is heavily
+          dependant on what kind of edits you have applied
+          on your video. Generally the more edits you have,
+          the more you will benefit from having extra
+          moviepy threads
 
         Examples
         ========
@@ -254,7 +265,6 @@ class VideoClip(Clip):
         """
         name, ext = os.path.splitext(os.path.basename(filename))
         ext = ext[1:].lower()
-        logger = proglog.default_bar_logger(logger)
 
         if codec is None:
 
@@ -288,14 +298,16 @@ class VideoClip(Clip):
 
         # enough cpu for multiprocessing ? USELESS RIGHT NOW, WILL COME AGAIN
         # enough_cpu = (multiprocessing.cpu_count() > 1)
-        logger(message="Moviepy - Building video %s." % filename)
+
+        verbose_print(verbose, "[MoviePy] >>>> Building video %s\n" % filename)
+
         if make_audio:
             self.audio.write_audiofile(audiofile, audio_fps,
                                        audio_nbytes, audio_bufsize,
                                        audio_codec, bitrate=audio_bitrate,
                                        write_logfile=write_logfile,
                                        verbose=verbose,
-                                       logger=logger)
+                                       progress_bar=progress_bar)
 
         ffmpeg_write_video(self, filename, fps, codec,
                            bitrate=bitrate,
@@ -304,18 +316,19 @@ class VideoClip(Clip):
                            audiofile=audiofile,
                            verbose=verbose, threads=threads,
                            ffmpeg_params=ffmpeg_params,
-                           logger=logger)
+                           progress_bar=progress_bar,
+                           moviepy_threads=moviepy_threads)
 
         if remove_temp and make_audio:
             if os.path.exists(audiofile):
                 os.remove(audiofile)
-        logger(message="Moviepy - video ready %s" % filename)
+        verbose_print(verbose, "[MoviePy] >>>> Video ready: %s \n\n"%filename)
 
     @requires_duration
     @use_clip_fps_by_default
     @convert_masks_to_RGB
     def write_images_sequence(self, nameformat, fps=None, verbose=True,
-                              withmask=True, logger='bar'):
+                              withmask=True, progress_bar=True):
         """ Writes the videoclip to a sequence of image files.
 
         Parameters
@@ -338,8 +351,8 @@ class VideoClip(Clip):
         verbose
           Boolean indicating whether to print information.
 
-        logger
-          Either 'bar' (progress bar) or None or any Proglog logger.
+        progress_bar
+          Boolean indicating whether to show the progress bar.
 
 
         Returns
@@ -355,17 +368,19 @@ class VideoClip(Clip):
         ``ImageSequenceClip``.
 
         """
-        logger = proglog.default_bar_logger(logger)
-        logger(message='Moviepy - Writing frames %s.' % nameformat)
+        verbose_print(verbose, "[MoviePy] Writing frames %s." % (nameformat))
 
         tt = np.arange(0, self.duration, 1.0 / fps)
 
         filenames = []
-        for i, t in logger.iter_bar(t=list(enumerate(tt))):
+        total = int(self.duration / fps) + 1
+        for i, t in tqdm(enumerate(tt), total=total, disable=not progress_bar):
             name = nameformat % i
             filenames.append(name)
             self.save_frame(name, t, withmask=withmask)
-        logger(message='Moviepy - Done writing frames %s.' % nameformat)
+
+        verbose_print(verbose,
+                      "[MoviePy]: Done writing frames %s.\n\n" % (nameformat))
 
         return filenames
 
@@ -374,7 +389,7 @@ class VideoClip(Clip):
     def write_gif(self, filename, fps=None, program='imageio',
                   opt='nq', fuzz=1, verbose=True,
                   loop=0, dispose=False, colors=None, tempfiles=False,
-                  logger='bar'):
+                  progress_bar=True):
         """ Write the VideoClip to a GIF file.
 
         Converts a VideoClip into an animated GIF using ImageMagick
@@ -431,7 +446,7 @@ class VideoClip(Clip):
         if program == 'imageio':
             write_gif_with_image_io(self, filename, fps=fps, opt=opt, loop=loop,
                                     verbose=verbose, colors=colors,
-                                    logger=logger)
+                                    progress_bar=progress_bar)
         elif tempfiles:
             # convert imageio opt variable to something that can be used with
             # ImageMagick
@@ -440,7 +455,7 @@ class VideoClip(Clip):
                                      program=program, opt=opt, fuzz=fuzz,
                                      verbose=verbose, loop=loop,
                                      dispose=dispose, colors=colors,
-                                     logger=logger)
+                                     progress_bar=progress_bar)
         else:
             # convert imageio opt variable to something that can be used with
             # ImageMagick
@@ -448,7 +463,7 @@ class VideoClip(Clip):
             write_gif(self, filename, fps=fps, program=program,
                       opt=opt, fuzz=fuzz, verbose=verbose, loop=loop,
                       dispose=dispose, colors=colors,
-                      logger=logger)
+                      progress_bar=progress_bar)
 
     # -----------------------------------------------------------------
     # F I L T E R I N G
@@ -1134,7 +1149,7 @@ class TextClip(ImageClip):
             print(" ".join(cmd))
 
         try:
-            subprocess_call(cmd, logger=None)
+            subprocess_call(cmd, verbose=False)
         except (IOError, OSError) as err:
             error = ("MoviePy Error: creation of %s failed because of the "
                      "following error:\n\n%s.\n\n." % (filename, str(err))
