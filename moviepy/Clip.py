@@ -442,7 +442,7 @@ class Clip:
     @requires_duration
     @use_clip_fps_by_default
     def iter_frames(self, fps=None, with_times = False, logger=None,
-                    dtype=None):
+                    dtype=None,withmask=False):
         """ Iterates over all the frames of the clip.
 
         Returns each frame of the clip as a HxWxN np.array,
@@ -472,10 +472,27 @@ class Clip:
             frame = self.get_frame(t)
             if (dtype is not None) and (frame.dtype != dtype):
                 frame = frame.astype(dtype)
+            if withmask:
+                mask = (255*mask.get_frame(t))
+                if mask.dtype != "uint8":
+                    mask = mask.astype("uint8")
+                frame = np.dstack([frame,mask])
             if with_times:
                 yield t, frame
             else:
                 yield frame
+
+    def single_frame(self, fps=None, with_times = False, dtype=None,withmask=False,t=None):
+        frame = self.get_frame(t)
+        if (dtype is not None) and (frame.dtype != dtype):
+            frame = frame.astype(dtype)
+        if withmask:
+            mask = (255*mask.get_frame(t))
+            if mask.dtype != "uint8":
+                mask = mask.astype("uint8")
+            frame = np.dstack([frame,mask])
+        return frame
+
 
     def close(self):
         """ 
